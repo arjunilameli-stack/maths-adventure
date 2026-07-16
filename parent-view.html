@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Maths Adventure — Parent / Teacher Tracker</title>
+<link href="https://fonts.googleapis.com/css2?family=Baloo+2:wght@500;600;700;800&family=Fredoka:wght@600;700&family=Space+Mono:wght@400;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --ink:#29294D; --ink-soft:#5C5C88; --teal:#14C6B0; --teal-dark:#0E9A89;
+    --coral:#FF6B6B; --coral-dark:#E14C4C; --gold:#FFC53D; --gold-soft:#FFF1C8;
+    --purple:#9B5DE5; --paper-card:#FFFFFF; --paper-line:#D6E8FA;
+    --shadow: 0 3px 0 rgba(41,41,77,0.05), 0 14px 26px -14px rgba(41,41,77,0.28);
+  }
+  *{ box-sizing:border-box; }
+  body{
+    margin:0; font-family:'Baloo 2',sans-serif; color:var(--ink);
+    background: linear-gradient(180deg,#F3FAFF 0%,#FBF7FF 100%); min-height:100vh;
+    padding: 28px 20px 60px;
+  }
+  .wrap{ max-width: 920px; margin: 0 auto; }
+  h1{ font-family:'Fredoka',sans-serif; font-size:26px; color:var(--purple); margin:0 0 4px; }
+  .sub{ color:var(--ink-soft); font-size:14px; margin:0 0 22px; }
+  .add-row{ display:flex; gap:8px; flex-wrap:wrap; background:#fff; border:2px solid var(--paper-line); border-radius:16px; padding:14px; box-shadow:var(--shadow); margin-bottom:22px; }
+  .add-row input{ flex:1; min-width:120px; padding:10px 12px; border-radius:10px; border:1.5px solid var(--paper-line); font-family:'Baloo 2',sans-serif; font-size:14px; }
+  .add-row input#code-input{ font-family:'Space Mono',monospace; text-transform:uppercase; letter-spacing:0.1em; max-width:160px; }
+  .add-row button{ padding:10px 18px; border:none; border-radius:10px; background:var(--purple); color:#fff; font-weight:700; font-family:'Baloo 2',sans-serif; cursor:pointer; }
+  .add-row button:hover{ background:#8447cf; }
+
+  .card{ background:var(--paper-card); border:2px solid var(--paper-line); border-radius:20px; box-shadow:var(--shadow); padding:20px 24px; margin-bottom:18px; position:relative; }
+  .card .remove{ position:absolute; top:14px; right:16px; background:none; border:none; color:var(--ink-soft); cursor:pointer; font-size:13px; }
+  .card h2{ font-family:'Fredoka',sans-serif; font-size:20px; margin:0 0 2px; color:var(--ink); }
+  .card .meta-line{ font-size:12.5px; color:var(--ink-soft); margin-bottom:14px; }
+  .stat-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(120px,1fr)); gap:12px; margin-bottom:14px; }
+  .stat{ background:#F5FAFF; border-radius:12px; padding:10px 12px; text-align:center; }
+  .stat .num{ font-family:'Space Mono',monospace; font-weight:700; font-size:19px; color:var(--purple); }
+  .stat .lbl{ font-size:11px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:0.04em; }
+  .bar-track{ height:10px; background:#EFEAE0; border-radius:100px; overflow:hidden; margin:4px 0 14px; }
+  .bar-fill{ height:100%; background:linear-gradient(90deg,var(--teal),var(--teal-dark)); border-radius:100px; }
+  .section-lbl{ font-family:'Space Mono',monospace; font-size:11px; text-transform:uppercase; letter-spacing:0.06em; color:var(--ink-soft); margin: 12px 0 6px; }
+  .daylog{ display:flex; gap:5px; align-items:flex-end; height:52px; }
+  .daylog .day{ flex:1; background:var(--paper-line); border-radius:4px 4px 0 0; position:relative; min-height:3px; }
+  .daylog .day.active{ background:var(--teal); }
+  .daylog-labels{ display:flex; gap:5px; font-size:9.5px; color:var(--ink-soft); text-align:center; margin-top:3px; }
+  .daylog-labels div{ flex:1; }
+  .gaps{ font-size:13px; line-height:1.7; }
+  .gaps .g{ display:inline-block; background:var(--gold-soft); color:var(--coral-dark); padding:2px 9px; border-radius:100px; margin:0 5px 5px 0; font-size:12px; font-weight:600; }
+  .empty-note{ color:var(--ink-soft); font-size:13px; }
+  .status-dot{ display:inline-block; width:8px; height:8px; border-radius:50%; margin-right:5px; background:#ccc; }
+  .status-dot.live{ background:var(--teal); }
+  .last-active{ font-size:12px; color:var(--ink-soft); }
+  #empty-state{ text-align:center; color:var(--ink-soft); padding:40px 0; font-size:14px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>👀 Progress Tracker</h1>
+  <p class="sub">Enter a student's sync code once — this page keeps watching live and updates automatically, from any device, anywhere.</p>
+
+  <div class="add-row">
+    <input id="label-input" placeholder="Name label (e.g. Aanya)">
+    <input id="code-input" maxlength="6" placeholder="SYNC CODE">
+    <button id="add-btn">+ Track</button>
+  </div>
+
+  <div id="cards"></div>
+  <div id="empty-state">No students tracked yet. Add a sync code above.</div>
+</div>
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script>
+/* =====================================================================
+   PASTE THE SAME FIREBASE CONFIG YOU USED IN THE STUDENT APP
+   ===================================================================== */
+const firebaseConfig = {
+  apiKey: "AIzaSyCLudG3XyY62m24gjGnhwpmsZh0Q32TV4g",
+  authDomain: "maths-adventure-64777.firebaseapp.com",
+  projectId: "maths-adventure-64777",
+  storageBucket: "maths-adventure-64777.firebasestorage.app",
+  messagingSenderId: "1006062023496",
+  appId: "1:1006062023496:web:546f66c4980f00a5a4b97d"
+};
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.firestore();
+
+const TRACKED_KEY = "parentTrackedStudents_v1";
+const TOTAL_QUESTIONS = 39;
+const SETS_PER_UNIT = 10;
+const UNIT_COUNT = 16;
+
+function loadTracked(){ try { return JSON.parse(localStorage.getItem(TRACKED_KEY) || "[]"); } catch(e){ return []; } }
+function saveTracked(list){ try { localStorage.setItem(TRACKED_KEY, JSON.stringify(list)); } catch(e){} }
+
+const unsubscribers = {};
+
+function fmtDate(d){ return d.toISOString().slice(0,10); }
+
+function renderCard(code, label, data){
+  let card = document.getElementById("card-" + code);
+  if (!card){
+    card = document.createElement("div");
+    card.className = "card";
+    card.id = "card-" + code;
+    document.getElementById("cards").appendChild(card);
+  }
+  document.getElementById("empty-state").style.display = "none";
+
+  if (!data){
+    card.innerHTML = `
+      <button class="remove" onclick="removeStudent('${code}')">✕ remove</button>
+      <h2>${label}</h2>
+      <p class="meta-line"><span class="status-dot"></span>Code ${code} — no data yet. They need to open the app once and connect with this code.</p>`;
+    return;
+  }
+
+  let blob = {};
+  try { blob = JSON.parse(data.blob || "{}"); } catch(e){}
+
+  let profile = null;
+  try { profile = JSON.parse(blob["mathsDiagnosticProfile_v1"] || "null"); } catch(e){}
+
+  let assess = {};
+  try { assess = JSON.parse(blob["mathsDiagnosticAssessStateV1"] || "{}"); } catch(e){}
+  const assessValues = Object.values(assess);
+  const passed = assessValues.filter(v => v.status === "pass").length;
+  const gaps = assessValues.filter(v => v.status === "gap").length;
+  const assessed = assessValues.filter(v => v.status === "pass" || v.status === "gap").length;
+  const diagPct = TOTAL_QUESTIONS ? Math.round((passed / TOTAL_QUESTIONS) * 100) : 0;
+
+  let arena = {};
+  try { arena = JSON.parse(blob["mathArenaProgress_v2"] || "{}"); } catch(e){}
+  let stars = 0;
+  Object.values(arena).forEach(topic => {
+    if (topic && topic.sets) Object.values(topic.sets).forEach(s => { stars += (s.stars || 0); });
+  });
+  const maxStars = UNIT_COUNT * SETS_PER_UNIT * 3;
+
+  const streakCount = parseInt(blob["mathsDiagnosticStreakCount"] || "0", 10) || 0;
+
+  let dailyLog = {};
+  try { dailyLog = JSON.parse(blob["mathsDailyLog_v1"] || "{}"); } catch(e){}
+  const today = new Date();
+  const last7 = [];
+  for (let i = 6; i >= 0; i--){
+    const d = new Date(today); d.setDate(d.getDate() - i);
+    const key = fmtDate(d);
+    last7.push({ label: d.toLocaleDateString(undefined,{weekday:'short'})[0], minutes: (dailyLog[key] && dailyLog[key].minutes) || 0 });
+  }
+  const maxMin = Math.max(1, ...last7.map(d => d.minutes));
+  const weekMinutes = last7.reduce((s,d)=>s+d.minutes,0);
+
+  const gapLabels = assessValues
+    .map((v,i) => v.status === "gap" ? Object.keys(assess)[i] : null)
+    .filter(Boolean);
+
+  const updatedAt = data.updatedAt && data.updatedAt.toDate ? data.updatedAt.toDate() : null;
+  const lastActiveStr = updatedAt ? updatedAt.toLocaleString() : "unknown";
+  const recentlyActive = updatedAt && (Date.now() - updatedAt.getTime() < 1000*60*10);
+
+  card.innerHTML = `
+    <button class="remove" onclick="removeStudent('${code}')">✕ remove</button>
+    <h2>${profile ? profile.name : label}</h2>
+    <p class="meta-line">
+      <span class="status-dot ${recentlyActive ? 'live':''}"></span>
+      Code ${code}${profile && profile.className ? " · " + profile.className : ""} ·
+      <span class="last-active">last synced ${lastActiveStr}</span>
+    </p>
+
+    <div class="stat-grid">
+      <div class="stat"><div class="num">${diagPct}%</div><div class="lbl">Diagnostic passed</div></div>
+      <div class="stat"><div class="num">${gaps}</div><div class="lbl">Gaps found</div></div>
+      <div class="stat"><div class="num">${stars}/${maxStars}</div><div class="lbl">Arena stars</div></div>
+      <div class="stat"><div class="num">🔥 ${streakCount}</div><div class="lbl">Day streak</div></div>
+    </div>
+
+    <div class="section-lbl">Diagnostic coverage (${assessed}/${TOTAL_QUESTIONS} assessed)</div>
+    <div class="bar-track"><div class="bar-fill" style="width:${Math.round((assessed/TOTAL_QUESTIONS)*100)}%"></div></div>
+
+    <div class="section-lbl">Practice minutes — last 7 days (${weekMinutes} min total)</div>
+    <div class="daylog">
+      ${last7.map(d => `<div class="day ${d.minutes>0?'active':''}" style="height:${Math.max(4, Math.round((d.minutes/maxMin)*48))}px" title="${d.minutes} min"></div>`).join("")}
+    </div>
+    <div class="daylog-labels">${last7.map(d => `<div>${d.label}</div>`).join("")}</div>
+
+    <div class="section-lbl">Roadblocks / gaps flagged</div>
+    <div class="gaps">
+      ${gapLabels.length ? gapLabels.map(id => `<span class="g">${id}</span>`).join("") : '<span class="empty-note">No gaps flagged yet — great progress, or not assessed yet.</span>'}
+    </div>
+  `;
+}
+
+window.removeStudent = function(code){
+  if (unsubscribers[code]) { unsubscribers[code](); delete unsubscribers[code]; }
+  const list = loadTracked().filter(s => s.code !== code);
+  saveTracked(list);
+  const card = document.getElementById("card-" + code);
+  if (card) card.remove();
+  if (!list.length) document.getElementById("empty-state").style.display = "block";
+};
+
+function watchStudent(code, label){
+  if (unsubscribers[code]) return; // already watching
+  unsubscribers[code] = db.collection("students").doc(code).onSnapshot(doc => {
+    renderCard(code, label, doc.exists ? doc.data() : null);
+  }, err => {
+    renderCard(code, label, null);
+  });
+}
+
+document.getElementById("add-btn").addEventListener("click", () => {
+  const code = document.getElementById("code-input").value.trim().toUpperCase();
+  const label = document.getElementById("label-input").value.trim() || code;
+  if (code.length < 4) return;
+  const list = loadTracked();
+  if (!list.find(s => s.code === code)) { list.push({ code, label }); saveTracked(list); }
+  watchStudent(code, label);
+  document.getElementById("code-input").value = "";
+  document.getElementById("label-input").value = "";
+});
+
+auth.signInAnonymously().then(() => {
+  const list = loadTracked();
+  if (list.length) document.getElementById("empty-state").style.display = "none";
+  list.forEach(s => watchStudent(s.code, s.label));
+}).catch(err => {
+  document.getElementById("empty-state").textContent = "Couldn't connect: " + err.message;
+  document.getElementById("empty-state").style.display = "block";
+});
+</script>
+</body>
+</html>
